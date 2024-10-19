@@ -1,7 +1,7 @@
 arff
-pandas
+pandas~=2.2.3
 scipy
-numpy
-matplotlib
-seaborn
+numpy~=2.1.2
+matplotlib~=3.9.2
+seaborn~=0.13.2
 absl-py

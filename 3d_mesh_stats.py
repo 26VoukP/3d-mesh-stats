@@ -2,7 +2,6 @@
 """ Writes images of graphs representing f_score vs threshold and violinplots of reconstruction distances.
 """
 
-#Import the Libraries
 import os
 import matplotlib
 import pandas as pd
@@ -23,6 +22,11 @@ _GT2PRED_SUFFIX = flags.DEFINE_string("gt2pred_suffix", ".gt2pred", "Suffix for 
                                                                     "prediction, without .npy suffix")
 _PRED2GT_SUFFIX = flags.DEFINE_string("pred2gt_suffix", ".pred2gt", "Suffix for files of projections from prediction to "
                                                                     "ground truth, without .npy suffix")
+_F_SCORE_CONFIDENCE_INTERVAL = flags.DEFINE_integer("f_score_confidence_interval", 66, "Confidence interval for f-score"
+                                                                                       "plot")
+_F_SCORE_MAX_DISTANCE_CM = flags.DEFINE_integer("f_score_max_distance_cm", 200, "Maximum distance threshold, in cm, "
+                                                                                       "plot")
+_RECONSTRUCTION_AGG = flags.DEFINE_bool("reconstruction_agg", True, "Whether or not inputted reconstructions should be aggregated")
 
 # start at .5cm, lots of small bins, a few large bins at the end up to 10m
 DISTANCE_FAKE_DATA_BINS_M = np.array([0.0] + np.geomspace(.1, 10_00, num=40).tolist())/100
@@ -73,13 +77,14 @@ def calc_angle_normals(scene_scan_df: pd.DataFrame) -> np.ndarray:
 
 
 @dataclasses.dataclass
-class Reconstruction_Info:
+class ReconstructionInfo:
   name: str
   gt2pred_file: str
   pred2gt_file: str
 
+
 @dataclasses.dataclass
-class Reconstruction_Data:
+class ReconstructionData:
   """Class representing 1 scene reconstructed with a particular method.
 
   Attributes:
@@ -92,7 +97,7 @@ class Reconstruction_Data:
   pred2gt: pd.DataFrame
 
   @staticmethod
-  def load(information_instance: Reconstruction_Info):
+  def load(information_instance: ReconstructionInfo):
     """Loads a scene from the given files.
 
     Args:
@@ -102,11 +107,11 @@ class Reconstruction_Data:
         np.load(information_instance.gt2pred_file), columns=COLUMNS)
     pred2gt = pd.DataFrame(
         np.load(information_instance.pred2gt_file), columns=COLUMNS)
-    return Reconstruction_Data(
+    return ReconstructionData(
         name=information_instance.name, gt2pred=gt2pred, pred2gt=pred2gt)
 
 
-def precision_recall(reconstruction: Reconstruction_Data, dist_thresholds_m: list) -> tuple[np.ndarray, np.ndarray]:
+def precision_recall(reconstruction: ReconstructionData, dist_thresholds_m: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
   """Gets precision, recall at multiple thresholds.
 
     Args:
@@ -122,17 +127,18 @@ def precision_recall(reconstruction: Reconstruction_Data, dist_thresholds_m: lis
   recall = true_pos / len(reconstruction.gt2pred) # 99 x 1/
 
   # pred_to_gt_filtered = pred_to_gt[pred_to_gt['boundary2'] == b'0']
-  pred_to_gt_filtered = reconstruction.pred2gt[reconstruction.pred2gt['boundary2'] == 0.0] # changed because cols are now floats
+  pred_to_gt_filtered = reconstruction.pred2gt[reconstruction.pred2gt['boundary2'] == 0.0]  # changed because cols are now floats
   true_pos = np.sum(np.expand_dims(pred_to_gt_filtered['distance'],0) <= vectorized_thresholds, axis=-1)
-  precision = true_pos / len(pred_to_gt_filtered) # 99 x 1
+  precision = true_pos / len(pred_to_gt_filtered)  # 99 x 1
   return precision, recall
 
-def fscore(reconstruction: Reconstruction_Data, distances_m: np.ndarray) -> np.ndarray:
+
+def fscore(reconstruction: ReconstructionData, distances_m: np.ndarray) -> np.ndarray:
   """Gets fscore values at a specified group of distance thresholds
 
     Args:
       reconstruction: the scene at which to evaluate precision and recall
-      dist_thresholds_m: a list of every distance threshold value in meters
+      distances_m: a list of every distance threshold value in meters
 
     Returns:
       A tuple of ndarrays with precision and recall, respectively
@@ -140,8 +146,9 @@ def fscore(reconstruction: Reconstruction_Data, distances_m: np.ndarray) -> np.n
   precision, recall = precision_recall(reconstruction, distances_m)
   return 2/(1/precision + 1/recall)
 
+
 def plot_fscore_and_confidence(
-    reconstructions : Sequence[Reconstruction_Info], percent_conf: int, method_name: str, max_dist_thresh_cm: int
+    reconstructions : Sequence[ReconstructionInfo], percent_conf: int, method_name: str, max_dist_thresh_cm: int
   ):
   """Plots fscore on y-axis and distance thresholds on x-axis
 
@@ -152,11 +159,14 @@ def plot_fscore_and_confidence(
       max_dist_thresh_cm: the maximum distance threshold in centimeters
   """
   logging.info("Plotting f-score for reconstructions %s", ",".join([r.name for r in reconstructions]))
+  png_num = 0
+  while os.path.isdir(f'fscore-plot({png_num})'):
+    png_num += 1
   distances_cm = np.arange(1, max_dist_thresh_cm, 2)
   # f_score_lists is a list of lists of 99 F-score values (distance threshold 0-50 cm)
   # creates a numpy array from f_score_lists with the scenes on axis 0
   f_score_scene_dist = np.vstack(
-    [fscore(Reconstruction_Data.load(s), distances_cm / 100)
+    [fscore(ReconstructionData.load(s), distances_cm / 100)
      for s in reconstructions]
   )
   median_arr = np.median(f_score_scene_dist, axis=0) # takes median across scenes
@@ -168,7 +178,8 @@ def plot_fscore_and_confidence(
   plt.title(method_name + " F-score")
   plt.xlabel("Distance Threshold(CM)")
   plt.ylabel("F-score")
-  plt.savefig('fscore_plot.png')
+  plt.savefig(f'fscore_plot(png_num).png')
+
 
 def get_opposite_direction_col(column_name: str) -> str:
   """Gets the column name of the same attribute in the opposite direction
@@ -185,10 +196,11 @@ def get_opposite_direction_col(column_name: str) -> str:
     elif column_name[i] == '2':
       return column_name[:i] + '1' + column_name[i+1:]
 
+
 def sample_from_implied_distribution(
     original_sample: Sequence[float],
     sample_size: int,
-    bins: np.ndarray=DISTANCE_FAKE_DATA_BINS_M
+    bins: np.ndarray = DISTANCE_FAKE_DATA_BINS_M
   ) -> np.ndarray:
   """Draws new samples from the implied distribution of a given sample.
 
@@ -211,7 +223,7 @@ def sample_from_implied_distribution(
       new_sample_query_prob, xp=[0] + cum_probability.tolist(), fp=bin_edges)
   return new_sample
 
-def resample_scene_distances(reconstruction: Reconstruction_Data, sample_size: int=100000
+def resample_scene_distances(reconstruction: ReconstructionData, sample_size: int=100000
                              ) -> pd.DataFrame:
   """Resamples the distances in the scene to the given size.
 
@@ -239,7 +251,7 @@ def resample_scene_distances(reconstruction: Reconstruction_Data, sample_size: i
 
   return pd.concat([sample_gt2pred, sample_pred2gt], ignore_index=True, axis=0)
 
-def create_x_labels_vplot(reconstructions : Sequence[Reconstruction_Info],
+def create_x_labels_vplot(reconstructions : Sequence[ReconstructionInfo],
                           split_interval : int | list):
   '''Creates a list of labels for each x tick on a violinplot figure
 
@@ -264,15 +276,19 @@ def create_x_labels_vplot(reconstructions : Sequence[Reconstruction_Info],
   return x_labels
 
 # adapt to be save data of previous violin plot
-def plot_violin_distance(reconstructions: Sequence[Reconstruction_Info],
+def plot_violin_distance(reconstructions: Sequence[ReconstructionInfo],
                          split_interval: int=0):
-  '''Plots each scene in a Sequence of scenes as a violin plot
+  """Plots each scene in a Sequence of scenes as a violin plot
 
   Args:
     reconstructions: Sequence of names of scenes along with data to load them
-    split_interval: how often to split imbetween violin plots
-  '''
+    split_interval: how often to split between violin plots
+  """
   logging.info("Plotting violins for reconstructions %s", ",".join([r.name for r in reconstructions]))
+
+  png_num = 0
+  while os.path.isdir(f'violin_plots({png_num})'):
+    png_num += 1
 
   fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -291,8 +307,8 @@ def plot_violin_distance(reconstructions: Sequence[Reconstruction_Info],
   for i, scene_information in enumerate(reconstructions):
     if split_interval > 0:
      i += int(i/split_interval)
-    i += 1 # +1 is to make first spot empty for readability
-    scene_data = Reconstruction_Data.load(scene_information)
+    i += 1  # +1 is to make first spot empty for readability
+    scene_data = ReconstructionData.load(scene_information)
     compressed_scene_data = resample_scene_distances(scene_data)
     sns.violinplot(data=compressed_scene_data,
                    x=np.repeat(i, len(compressed_scene_data)), y="distance(m)",
@@ -309,25 +325,31 @@ def plot_violin_distance(reconstructions: Sequence[Reconstruction_Info],
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig('violin_plots.png')
+  plt.savefig(f'violin_plots({png_num}).png')
+
 
 def main(argv):
   assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
   matplotlib.use('Agg')
   # makes a list of my own scene data for testing
-  method_1_scans_info = []
+  reconstructions_info = []
   reconstructions = _RECONSTRUCTIONS.value.split(" ")
   for reconstruction in reconstructions:
-    method_1_scans_info.append(Reconstruction_Info(name=reconstruction,
+    reconstructions_info.append(ReconstructionInfo(name=reconstruction,
                                                    gt2pred_file=os.path.join(_INPUT_DIR.value,
                                                                              reconstruction + _GT2PRED_SUFFIX.value + ".npy"),
                                                    pred2gt_file=os.path.join(_INPUT_DIR.value,
                                                                              reconstruction + _PRED2GT_SUFFIX.value + ".npy"))
-                               )
-  plot_fscore_and_confidence(method_1_scans_info, 66, "IPhone Scan", 200)
-  plot_violin_distance(method_1_scans_info, 0)
+                                )
+  if _RECONSTRUCTION_AGG.value:
+    plot_fscore_and_confidence(reconstructions_info, _F_SCORE_CONFIDENCE_INTERVAL.value, "Overall F-Score",
+                               _F_SCORE_MAX_DISTANCE_CM.value)
+  else:
+    for reconstruction_info in reconstructions_info:
+      plot_fscore_and_confidence([reconstruction_info], _F_SCORE_CONFIDENCE_INTERVAL.value, reconstruction_info.name,
+                                 _F_SCORE_MAX_DISTANCE_CM.value)
+  plot_violin_distance(reconstructions_info, 0)
 
 
-# make this a top level executable script
 if __name__ == "__main__":
   app.run(main)
