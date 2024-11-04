@@ -3,9 +3,10 @@
 """
 
 import dataclasses
+import glob
 import logging
 import os
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -18,21 +19,20 @@ from matplotlib.patches import Rectangle
 from scipy.stats import norm
 
 _INPUT_DIR = flags.DEFINE_string("input_dir", ".", "Directory with the input files.")
-_RECONSTRUCTIONS = flags.DEFINE_string("reconstructions", "",
-                                       "Space separated list of mesh reconstructions to load. They could correspond"
-                                       "either to scenes of the same reconstruction method or multiple etc.")
+_GROUPS = flags.DEFINE_string("groups", "",
+                              "Space separated list of mesh reconstructions to load. They could correspond"
+                              "either to scenes of the same reconstruction method or multiple etc.")
 _GT2PRED_SUFFIX = flags.DEFINE_string("gt2pred_suffix", ".gt2pred",
                                       "Suffix for files of projections from ground truth to "
                                       "prediction, without .npy suffix")
 _PRED2GT_SUFFIX = flags.DEFINE_string("pred2gt_suffix", ".pred2gt",
                                       "Suffix for files of projections from prediction to "
                                       "ground truth, without .npy suffix")
-_F_SCORE_PERCENTILE_FROM_MEDIAN = flags.DEFINE_integer("f_score_percentile_from_median", 66, "Confidence interval for f-score"
-                                                                                       "plot")
+_F_SCORE_PERCENTILE_FROM_MEDIAN = flags.DEFINE_integer("f_score_percentile_from_median", 66,
+                                                       "Confidence interval for f-score"
+                                                       "plot")
 _F_SCORE_MAX_DISTANCE_CM = flags.DEFINE_integer("f_score_max_distance_cm", 200, "Maximum distance threshold, in cm, "
                                                                                 "plot")
-_RECONSTRUCTION_AGG = flags.DEFINE_bool("reconstruction_agg", True,
-                                        "Whether or not inputted reconstructions should be aggregated")
 
 # start at .5cm, lots of small bins, a few large bins at the end up to 10m
 DISTANCE_FAKE_DATA_BINS_M = np.array([0.0] + np.geomspace(.1, 10_00, num=40).tolist()) / 100
@@ -87,6 +87,14 @@ class ReconstructionInfo:
   name: str
   gt2pred_file: str
   pred2gt_file: str
+
+
+@dataclasses.dataclass
+class ShadedAreaCurve:
+  low: np.ndarray
+  mid: np.ndarray
+  high: np.ndarray
+  x: np.ndarray
 
 
 @dataclasses.dataclass
@@ -155,47 +163,70 @@ def fscore(reconstruction: ReconstructionData, distances_m: np.ndarray) -> np.nd
   return 2 / (1 / precision + 1 / recall)
 
 
-def plot_fscore_and_confidence(
-    reconstructions: Sequence[ReconstructionInfo], percentile_from_median: int, plot_name: str, max_dist_thresh_cm: int
-):
+def fscore_and_confidence(
+    groups: Mapping[str, Sequence[ReconstructionInfo]], percentile_from_median: int, plot_name: str,
+    max_dist_thresh_cm: int
+) -> dict[str, ShadedAreaCurve]:
   """Plots fscore on y-axis and distance thresholds on x-axis
 
     Args:
-      reconstructions: information for each scene to be aggregated in the plot
+      groups: information for each group of scenes to be aggregated in the plot
       percentile_from_median: the confidence interval to plot
       plot_name: name of the method whose scans are being plotted
       max_dist_thresh_cm: the maximum distance threshold in centimeters
   """
-  logging.info("Plotting f-score for reconstructions %s", ",".join([r.name for r in reconstructions]))
-  png_num = 0
-  while os.path.isdir(f'fscore-plot({png_num})'):
-    png_num += 1
-  distances_cm = np.arange(1, max_dist_thresh_cm, 2)
-  # f_score_lists is a list of lists of 99 F-score values (distance threshold 0-50 cm)
-  # creates a numpy array from f_score_lists with the scenes on axis 0
-  f_score_scene_dist = np.vstack(
-    [fscore(ReconstructionData.load(s), distances_cm / 100)
-     for s in reconstructions]
-  )
-  median_arr = np.median(f_score_scene_dist, axis=0)  # takes median across scenes
-  # Code below attempts to compute an actual confidence interval but the problem is that the normal distribution
-  # assumption is badly violated by the constraint that the f-score is in [0, 1] since precision and recall are as well.
-  # With the ci formula below we do see ci's that go above 1.
-  # mean = np.mean(f_score_scene_dist, axis=0)
-  # stddev = np.std(f_score_scene_dist, axis=0,
-  #                 ddof=1) # "sample" standard deviation
-  # z = norm.ppf(1 - (1- percent_conf/100)/2)
-  # low_ci = mean - z * stddev
-  # high_ci = mean + z * stddev
-  low_ci = np.percentile(f_score_scene_dist, (percentile_from_median + 100) / 2, axis=0)  # takes lower ci across scenes
-  high_ci = np.percentile(f_score_scene_dist, (100 - percentile_from_median) / 2, axis=0)  # takes upper ci across scenes
-  plt.plot(distances_cm, median_arr, color='blue')
-  # colors in space between ci and median
-  plt.fill_between(distances_cm, low_ci, high_ci, color='#ADD8E6', alpha=0.75)
-  plt.title(plot_name)
+  group_distributions = {}
+  for group, reconstructions in groups.items():
+    logging.info("Plotting f-score for reconstructions %s", ",".join([r.name for r in reconstructions]))
+    distances_cm = np.arange(1, max_dist_thresh_cm, 2)
+    # f_score_lists is a list of lists of 99 F-score values (distance threshold 0-50 cm)
+    # creates a numpy array from f_score_lists with the scenes on axis 0
+    f_score_scene_dist = np.vstack(
+      [fscore(ReconstructionData.load(s), distances_cm / 100)
+       for s in reconstructions]
+    )
+    median_arr = np.median(f_score_scene_dist, axis=0)  # takes median across scenes
+    # Code below attempts to compute an actual confidence interval but the problem is that the normal distribution
+    # assumption is badly violated by the constraint that the f-score is in [0, 1] since precision and recall are as well.
+    # With the ci formula below we do see ci's that go above 1.
+    # mean = np.mean(f_score_scene_dist, axis=0)
+    # stddev = np.std(f_score_scene_dist, axis=0,
+    #                 ddof=1) # "sample" standard deviation
+    # z = norm.ppf(1 - (1- percent_conf/100)/2)
+    # low_ci = mean - z * stddev
+    # high_ci = mean + z * stddev
+    low_ci = np.percentile(f_score_scene_dist, (percentile_from_median + 100) / 2,
+                           axis=0)  # takes lower ci across scenes
+    high_ci = np.percentile(f_score_scene_dist, (100 - percentile_from_median) / 2,
+                            axis=0)  # takes upper ci across scenes
+
+    group_distributions[group] = ShadedAreaCurve(low=low_ci, mid=median_arr, high=high_ci, x=distances_cm)
+  return group_distributions
+
+
+def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
+  for group, curve in shaded_curves.items():
+    fig = plt.plot(figsize=(10, 6))
+    plt.plot(curve.x, curve.mid, color='blue')
+    # colors in space between ci and median
+    plt.fill_between(curve.x, curve.low, curve.high, color='#ADD8E6', alpha=0.75)
+    plt.title(f'{group} F-score')
+    plt.xlabel("Distance Threshold(CM)")
+    plt.ylabel(f"F-score mean and {percentile}% from median")
+    plt.savefig(os.path.join(_INPUT_DIR.value, f'{group}_F-Score.png'))
+    plt.close()
+
+
+def plot_combined_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
+  for group, curve in shaded_curves.items():
+    plt.plot(curve.x, curve.mid, color='blue')
+    # colors in space between ci and median
+    plt.fill_between(curve.x, curve.low, curve.high, color='#ADD8E6', alpha=0.75)
+
+  plt.title(f'Scene F-scores')
   plt.xlabel("Distance Threshold(CM)")
-  plt.ylabel(f"F-score mean and {percentile_from_median}% from median")
-  plt.savefig(f'fscore_plot({png_num}).png')
+  plt.ylabel(f"F-score mean and {percentile}% from median")
+  plt.savefig(os.path.join(_INPUT_DIR.value, f'Scene F-Scores.png'))
 
 
 def get_opposite_direction_col(column_name: str) -> str:
@@ -270,49 +301,41 @@ def resample_scene_distances(reconstruction: ReconstructionData, sample_size: in
   return pd.concat([sample_gt2pred, sample_pred2gt], ignore_index=True, axis=0)
 
 
-def create_x_labels_vplot(reconstructions: Sequence[ReconstructionInfo],
-                          split_interval: int | list):
+def create_x_labels_vplot(groups: dict[str, Sequence[ReconstructionInfo]]):
   '''Creates a list of labels for each x tick on a violinplot figure
 
   Args:
-    reconstructions: Sequence of names of scenes along with data to load them
+    groups: Sequence of names of scenes along with data to load them
     split_interval: how often to split imbetween violin plots
 
   Returns:
     list of labels for each x tick
   '''
-
   x_labels = [""]
-  for i, scene_info in enumerate(reconstructions):
-    if split_interval > 0 and i > 0 and i % split_interval == 0:
-      x_labels.append("")
-    j = 20
-    while j < len(scene_info.name):
-      if "\n" not in scene_info.name[j:j + 20]:
-        scene_info.name = scene_info.name[:j] + "\n" + scene_info.name[j:]
-      j += 20
-    x_labels.append(scene_info.name)
+  for group, reconstructions in groups.items():
+    for i, scene_info in enumerate(reconstructions):
+      j = 20
+      while j < len(scene_info.name):
+        if "\n" not in scene_info.name[j:j + 20]:
+          scene_info.name = scene_info.name[:j] + "\n" + scene_info.name[j:]
+        j += 20
+      x_labels.append(scene_info.name)
+    x_labels.append("")
   return x_labels
 
 
 # adapt to be save data of previous violin plot
-def plot_violin_distance(reconstructions: Sequence[ReconstructionInfo],
-                         split_interval: int = 0):
+def plot_violin_distance(groups: dict[str, Sequence[ReconstructionInfo]]):
   """Plots each scene in a Sequence of scenes as a violin plot
 
   Args:
-    reconstructions: Sequence of names of scenes along with data to load them
-    split_interval: how often to split between violin plots
+    groups: Sequence of names of scenes along with data to load them
   """
-  logging.info("Plotting violins for reconstructions %s", ",".join([r.name for r in reconstructions]))
-
-  png_num = 0
-  while os.path.isdir(f'violin_plots({png_num})'):
-    png_num += 1
+  logging.info("Plotting violins for groups")
 
   fig, ax = plt.subplots(figsize=(10, 6))
 
-  x_labels = create_x_labels_vplot(reconstructions, split_interval)
+  x_labels = create_x_labels_vplot(groups)
 
   # Customize the plot (optional)
   plt.xlabel("Scene/Method")
@@ -323,17 +346,17 @@ def plot_violin_distance(reconstructions: Sequence[ReconstructionInfo],
   ax.set_xticklabels(x_labels)
   ax.set_yscale('log')
 
-  for i, scene_information in enumerate(reconstructions):
-    if split_interval > 0:
-      i += int(i / split_interval)
-    i += 1  # +1 is to make first spot empty for readability
-    scene_data = ReconstructionData.load(scene_information)
-    compressed_scene_data = resample_scene_distances(scene_data)
-    sns.violinplot(data=compressed_scene_data,
-                   x=np.repeat(i, len(compressed_scene_data)), y="distance(m)",
-                   hue="direction", split=True, inner="quart",
-                   palette={"gt2pred": "skyblue", "pred2gt": "lightcoral"},
-                   native_scale=True)
+  j = 1
+  for group, reconstructions in groups.items():
+    for i, scene_information in enumerate(reconstructions):
+      scene_data = ReconstructionData.load(scene_information)
+      compressed_scene_data = resample_scene_distances(scene_data)
+      sns.violinplot(data=compressed_scene_data,
+                     x=np.repeat(j, len(compressed_scene_data)), y="distance(m)",
+                     hue="direction", split=True, inner="quart",
+                     palette={"gt2pred": "skyblue", "pred2gt": "lightcoral"},
+                     native_scale=True)
+    j += i + 2 # add 2 because enum starts at 0 and another for blank spot between violins
 
   ax.add_patch(
     Rectangle((0.3, .01), x_positions[-1] + .5, 0, facecolor='none',
@@ -344,30 +367,36 @@ def plot_violin_distance(reconstructions: Sequence[ReconstructionInfo],
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'violin_plots({png_num}).png')
+  plt.savefig(os.path.join(_INPUT_DIR.value, f'violin_plots.png'))
 
 
 def main(argv):
   assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
   matplotlib.use('Agg')
   # makes a list of my own scene data for testing
-  reconstructions_info = []
-  reconstructions = _RECONSTRUCTIONS.value.split(" ")
-  for reconstruction in reconstructions:
-    reconstructions_info.append(ReconstructionInfo(name=reconstruction,
-                                                   gt2pred_file=os.path.join(_INPUT_DIR.value,
-                                                                             reconstruction + _GT2PRED_SUFFIX.value + ".npy"),
-                                                   pred2gt_file=os.path.join(_INPUT_DIR.value,
-                                                                             reconstruction + _PRED2GT_SUFFIX.value + ".npy"))
-                                )
-  if _RECONSTRUCTION_AGG.value:
-    plot_fscore_and_confidence(reconstructions_info, _F_SCORE_PERCENTILE_FROM_MEDIAN.value, "Overall F-Score",
-                               _F_SCORE_MAX_DISTANCE_CM.value)
-  else:
-    for reconstruction_info in reconstructions_info:
-      plot_fscore_and_confidence([reconstruction_info], _F_SCORE_PERCENTILE_FROM_MEDIAN.value, reconstruction_info.name,
-                                 _F_SCORE_MAX_DISTANCE_CM.value)
-  plot_violin_distance(reconstructions_info, 0)
+  groups_info = {}
+  groups = _GROUPS.value.split(" ")
+  for group in groups:
+    i = 0
+    current_group = []
+    pattern = os.path.join(_INPUT_DIR.value, group, "*" + _GT2PRED_SUFFIX.value + ".npy")
+    for gt2pred_file in glob.glob(pattern):
+      pred2gt_file = os.path.splitext(os.path.splitext(gt2pred_file)[0])[0] + _PRED2GT_SUFFIX.value + ".npy"
+      current_group.append(ReconstructionInfo(name=f'{group}_reconstruction{i}',
+                                              gt2pred_file=gt2pred_file,
+                                              pred2gt_file=pred2gt_file)
+                           )
+      i += 1
+    groups_info[group] = current_group
+
+  fscores_curves = fscore_and_confidence(groups_info, _F_SCORE_PERCENTILE_FROM_MEDIAN.value, "Overall F-Score",
+                                         _F_SCORE_MAX_DISTANCE_CM.value)
+
+  plot_fscores(fscores_curves, _F_SCORE_PERCENTILE_FROM_MEDIAN.value)
+  plot_combined_fscores(fscores_curves, _F_SCORE_PERCENTILE_FROM_MEDIAN.value)
+  for group, shaded_curve in fscores_curves.items():
+    np.savez(os.path.join(_INPUT_DIR.value, f'fscore_{group}.npz'), shaded_curve.low, shaded_curve.mid, shaded_curve.high)
+  plot_violin_distance(groups_info)
 
 
 if __name__ == "__main__":
