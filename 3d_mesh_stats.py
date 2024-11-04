@@ -356,7 +356,7 @@ def plot_violin_distance(groups: dict[str, Sequence[ReconstructionInfo]]):
                      hue="direction", split=True, inner="quart",
                      palette={"gt2pred": "skyblue", "pred2gt": "lightcoral"},
                      native_scale=True)
-    j += i + 2 # add 2 because enum starts at 0 and another for blank spot between violins
+    j += i + 1 + 1 # adds 2 because enum starts at 0 and another for blank spot between violins
 
   ax.add_patch(
     Rectangle((0.3, .01), x_positions[-1] + .5, 0, facecolor='none',
