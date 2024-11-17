@@ -22,6 +22,10 @@ _INPUT_DIR = flags.DEFINE_string("input_dir", ".", "Directory with the input fil
 _GROUPS = flags.DEFINE_string("groups", "",
                               "Space separated list of mesh reconstructions to load. They could correspond"
                               "either to scenes of the same reconstruction method or multiple etc.")
+_GROUP_FILE_PATTERN = flags.DEFINE_string("group_file_pattern", "{group}/*",
+                                          "glob pattern for all the files that are to "
+                                          "be aggregated for a group. Must contain "
+                                          "{group}")
 _GT2PRED_SUFFIX = flags.DEFINE_string("gt2pred_suffix", ".gt2pred",
                                       "Suffix for files of projections from ground truth to "
                                       "prediction, without .npy suffix")
@@ -213,7 +217,7 @@ def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
     plt.title(f'{group} F-score')
     plt.xlabel("Distance Threshold(CM)")
     plt.ylabel(f"F-score mean and {percentile}% from median")
-    plt.savefig(os.path.join(_INPUT_DIR.value, f'{group}_F-Score.png'))
+    plt.savefig(f'{group}_F-Score.png')
     plt.close()
 
 
@@ -226,7 +230,7 @@ def plot_combined_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile)
   plt.title(f'Scene F-scores')
   plt.xlabel("Distance Threshold(CM)")
   plt.ylabel(f"F-score mean and {percentile}% from median")
-  plt.savefig(os.path.join(_INPUT_DIR.value, f'Scene F-Scores.png'))
+  plt.savefig(f'aggregated_f_scores.png')
 
 
 def get_opposite_direction_col(column_name: str) -> str:
@@ -349,6 +353,7 @@ def plot_violin_distance(groups: dict[str, Sequence[ReconstructionInfo]]):
   j = 1
   for group, reconstructions in groups.items():
     for i, scene_information in enumerate(reconstructions):
+      logging.info("Plotting violin for group %s item %s", group, scene_information.name)
       scene_data = ReconstructionData.load(scene_information)
       compressed_scene_data = resample_scene_distances(scene_data)
       sns.violinplot(data=compressed_scene_data,
@@ -367,7 +372,7 @@ def plot_violin_distance(groups: dict[str, Sequence[ReconstructionInfo]]):
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(os.path.join(_INPUT_DIR.value, f'violin_plots.png'))
+  plt.savefig(f'violin_plots.png')
 
 
 def main(argv):
@@ -379,10 +384,11 @@ def main(argv):
   for group in groups:
     i = 0
     current_group = []
-    pattern = os.path.join(_INPUT_DIR.value, group, "*" + _GT2PRED_SUFFIX.value + ".npy")
+    pattern = os.path.join(_INPUT_DIR.value, _GROUP_FILE_PATTERN.value.format(group=group) + _GT2PRED_SUFFIX.value + ".npy")
     for gt2pred_file in glob.glob(pattern):
-      pred2gt_file = os.path.splitext(os.path.splitext(gt2pred_file)[0])[0] + _PRED2GT_SUFFIX.value + ".npy"
-      current_group.append(ReconstructionInfo(name=f'{group}_reconstruction{i}',
+      file_base = os.path.splitext(os.path.splitext(gt2pred_file)[0])[0]
+      pred2gt_file = file_base + _PRED2GT_SUFFIX.value + ".npy"
+      current_group.append(ReconstructionInfo(name=f'{group}_{file_base}',
                                               gt2pred_file=gt2pred_file,
                                               pred2gt_file=pred2gt_file)
                            )
@@ -395,7 +401,7 @@ def main(argv):
   plot_fscores(fscores_curves, _F_SCORE_PERCENTILE_FROM_MEDIAN.value)
   plot_combined_fscores(fscores_curves, _F_SCORE_PERCENTILE_FROM_MEDIAN.value)
   for group, shaded_curve in fscores_curves.items():
-    np.savez(os.path.join(_INPUT_DIR.value, f'fscore_{group}.npz'), shaded_curve.low, shaded_curve.mid, shaded_curve.high)
+    np.savez(f'fscore_{group}.npz', shaded_curve.low, shaded_curve.mid, shaded_curve.high)
   plot_violin_distance(groups_info)
 
 
