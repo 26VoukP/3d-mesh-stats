@@ -1,9 +1,9 @@
 import os
 import subprocess
-from absl import flags
+from absl import flags, app
 import mesh_stats_plotter
 
-_SCANNETPP_DATA_DIR = flags.DEFINE_string("scanetpp_data_dir", "./scanetpp_data", "Directory with the scanetpp meshes.")
+_SCANNETPP_DATA_DIR = flags.DEFINE_string("scannetpp_data_dir", "./scanetpp_data", "Directory with the scanetpp meshes.")
 _PRED_MESH_DIR = flags.DEFINE_string("pred_mesh_dir", "./pred_meshes",
                                      "Directory with meshes from one mesh reconstructing algorithm.")
 _OUTPUT_DIR = flags.DEFINE_string("output_dir", ".", "Directory in which to put folders for each scene with all data "
@@ -16,7 +16,8 @@ _F_SCORE_PERCENTILE_FROM_MEDIAN = flags.DEFINE_integer("f_score_percentile_from_
 _F_SCORE_MAX_DISTANCE_CM = flags.DEFINE_integer("f_score_max_distance_cm", 200, "Maximum distance threshold, in cm, "
                                                                                 "plot")
 
-def main():
+def main(argv):
+    assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
     # Iterate over scenes
     scene_output_dirs = []
     for scene_name in os.listdir(_SCANNETPP_DATA_DIR.value):
@@ -43,4 +44,4 @@ def main():
                                   _F_SCORE_PERCENTILE_FROM_MEDIAN.value, _F_SCORE_MAX_DISTANCE_CM.value)
 
 if __name__ == "__main__":
-    main()
+    app.run(main)
