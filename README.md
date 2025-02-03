@@ -7,6 +7,19 @@ mesh to a ground truth mesh, and generate plots visualizing the distances betwee
 surface on another mesh. The plots include
 f-score vs distance threshold plots and violin plots (https://mode.com/blog/violin-plot-examples). The f-score vs
 threshold plots are saved as PNGs, and the data for the f-score each plot is saved as a .npy file.
+
+## Dependencies
+
+The following libraries are required to run this program:
+
+- arff
+- pandas~=2.2.3
+- scipy
+- numpy~=2.1.2
+- matplotlib~=3.9.2
+- seaborn~=0.13.2
+- absl-py
+
 ## Scripts
 ### make_plots_from_meshes.py
 This script generates the plots and .npy files from 2 directories, one with scannet++ ground truth .ply files and 

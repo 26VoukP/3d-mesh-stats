@@ -405,7 +405,6 @@ def make_plots(input_dir, reconstructions, gt2pred_suffix, f_score_pecentile_fro
                f_score_max_distance_cm):
   matplotlib.use('Agg')
   # makes a list of my own scene data for testing
-  reconstructions = reconstructions.split(" ")
   reconstructions_info = []
   for reconstruction in reconstructions:
     folder_path = os.path.join(input_dir, reconstruction)

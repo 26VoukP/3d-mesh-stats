@@ -25,13 +25,14 @@ def main(argv):
         gt_mesh = os.path.join(scene_dir, "scans", "mesh_aligned_0.05.ply")
         # Create scene directory
         scene_output_dir = os.path.join(_OUTPUT_DIR.value, scene_name)
-        scene_output_dirs.append(scene_output_dir)
+        scene_output_dirs.append(os.path.basename(scene_output_dir))
         os.makedirs(scene_output_dir, exist_ok=True)
-        pred_meshes = [f for f in os.listdir(_PRED_MESH_DIR.value) if scene_name in f]
+        pred_meshes = [os.path.join(_PRED_MESH_DIR.value, f) for f in os.listdir(_PRED_MESH_DIR.value) if scene_name in f]
         for pred_mesh in pred_meshes:
             # assumes pred_mesh will consist of scene name and name of reconstruction algorithm
-            pred_to_gt_stats = os.path.join(scene_output_dir, pred_mesh + ".pred2gt.npy")
-            gt_to_pred_stats = os.path.join(scene_output_dir, pred_mesh+ ".gt2pred.npy")
+            pred_basename = os.path.splitext(os.path.basename(pred_mesh))[0]
+            pred_to_gt_stats = os.path.join(scene_output_dir, pred_basename + ".pred2gt.npy")
+            gt_to_pred_stats = os.path.join(scene_output_dir, pred_basename + ".gt2pred.npy")
 
             # Create stats files
             if not os.path.exists(pred_to_gt_stats):
