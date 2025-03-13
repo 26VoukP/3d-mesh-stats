@@ -62,24 +62,6 @@ COLUMNS = [
 ]
 
 
-def calc_angle_normals(scene_scan_df: pd.DataFrame) -> np.ndarray:
-  """Gets the angles between corresponding vertex normals.
-
-  Args:
-    scene_scan_df: a pandas DataFrame of two corresponding meshes with
-    associated points. It must contain columns normal{1, 2}.{x, y, z}.
-  Returns:
-    1d array of angles between the corresponding normals, in degrees.
-  """
-  x1 = scene_scan_df['normal1.x']
-  y1 = scene_scan_df['normal1.y']
-  z1 = scene_scan_df['normal1.z']
-  x2 = scene_scan_df['normal2.x']
-  y2 = scene_scan_df['normal2.y']
-  z2 = scene_scan_df['normal2.z']
-  return np.arccos(np.clip(x1 * x2 + y1 * y2 + z1 * z2, -1, 1)) * 180 / np.pi
-
-
 @dataclasses.dataclass
 class ReconstructionInfo:
   name: str
@@ -128,6 +110,28 @@ class ReconstructionData:
                                                    columns=['distance']),
                               pred2gt=pd.DataFrame(sample_from_implied_distribution(self.pred2gt, 100_000),
                                                    columns=['distance']))
+
+def calc_angle_normals(reconstruction: ReconstructionData) -> pd.DataFrame:
+  """Gets the angles between corresponding vertex normals.
+
+  Args:
+    reconstruction: a pandas DataFrame of two corresponding meshes with
+    associated points. It must contain columns normal{1, 2}.{x, y, z}.
+  Returns:
+    1d array of angles between the corresponding normals, in degrees.
+  """
+  data = [reconstruction.gt2pred, reconstruction.pred2gt]
+  for i in range(len(data)):
+    x1 = data[i]['normal1.x']
+    y1 = data[i]['normal1.y']
+    z1 = data[i]['normal1.z']
+    x2 = data[i]['normal2.x']
+    y2 = data[i]['normal2.y']
+    z2 = data[i]['normal2.z']
+    normal_vecs = pd.DataFrame(np.arccos(np.clip(x1 * x2 + y1 * y2 + z1 * z2, -1, 1)) * 180 / np.pi, columns=['normal_vector_angles'])
+    normal_vecs['direction'] = 'gt2pred' if i == 0 else 'pred2gt'
+    data[i] = normal_vecs
+  return pd.concat(data, ignore_index=True, axis=0)
 
 
 def precision_recall(reconstruction: ReconstructionData, dist_thresholds_m: np.ndarray) -> tuple[
@@ -415,6 +419,48 @@ def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
   plt.tight_layout()
   plt.savefig(f'agg_violin_plot.png')
 
+def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[ReconstructionInfo]):
+  """Plots each scene in a Sequence of scenes as a violin plot
+
+  Args:
+    reconstructions: Sequence of names of scenes along with data to load them
+  """
+  logging.info("Plotting angle normal vector violins for scenes")
+
+  fig, ax = plt.subplots(figsize=(10, 6))
+
+
+  # Customize the plot
+  plt.xlabel("Scene")
+  plt.ylabel("Angle (Degrees)")
+  plt.title('Angle Between Normal Vectors of Pred and Ground Truth')
+  x_labels = create_x_labels_vplot(reconstructions)
+  x_positions = np.arange(len(x_labels))
+  ax.set_xticks(x_positions)
+  ax.set_xticklabels(x_labels)
+
+  j = 1
+  for i, reconstruction in enumerate(reconstructions):
+    logging.info("Plotting violin for group item " + reconstruction.name)
+    normal_angle_scene_data = calc_angle_normals(ReconstructionData.load(reconstruction))
+    sns.violinplot(data=normal_angle_scene_data,
+                   x=np.repeat(j, len(normal_angle_scene_data)), y="normal_vector_angles",
+                   hue="direction", split=True, inner="quart",
+                   palette={"gt2pred": "skyblue", "pred2gt": "lightcoral"},
+                   native_scale=True)
+    j += 2
+
+  ax.add_patch(
+    Rectangle((0.3, 10), x_positions[-1] + .5, 0, facecolor='none',
+              edgecolor='black')
+  )
+  handles, labels = plt.gca().get_legend_handles_labels()
+  handles_to_show = handles[:2]
+  labels_to_show = labels[:2]
+  plt.legend(handles_to_show, labels_to_show)
+  plt.tight_layout()
+  plt.savefig(f'scene_normal_angle_violin_plot.png')
+
 
 def make_plots():
   matplotlib.use('Agg')
@@ -445,7 +491,7 @@ def make_plots():
   np.savez(f'aggregated_fscore.npz', aggregated_curve.low, aggregated_curve.mid, aggregated_curve.high)
   plot_violin_distance_individual(reconstructions_info)
   plot_agg_violin_distance(reconstructions_info)
-
+  plot_violin_normal_vec_angles_individual(reconstructions_info)
 
 def main(argv):
   assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
