@@ -41,7 +41,11 @@ def main(argv):
             # Create stats files
             if not os.path.exists(pred_to_gt_stats):
                 print(f"Creating {pred_to_gt_stats}")
+                print(" ".join([_MSHCOMPARE_FILE.value, pred_mesh, gt_mesh, pred_to_gt_stats, "-v"]))
+                print(f"{os.environ['PATH']=}")
                 subprocess.run([_MSHCOMPARE_FILE.value, pred_mesh, gt_mesh, pred_to_gt_stats, "-v"])
+            if not os.path.exists(pred_to_gt_stats):
+              raise ValueError(f'Failed to create {pred_to_gt_stats}')
             if not os.path.exists(gt_to_pred_stats):
                 print(f"Creating {gt_to_pred_stats}")
                 subprocess.run([_MSHCOMPARE_FILE.value, gt_mesh, pred_mesh, gt_to_pred_stats, "-v"])
