@@ -163,7 +163,7 @@ def fscore_and_confidence(
   """Plots fscore on y-axis and distance thresholds on x-axis
 
     Args:
-      groups: information for each group of scenes to be aggregated in the plot
+      reconstructions: information for each reconstruction to be aggregated in the plot
       percentile_from_median: the confidence interval to plot
       plot_name: name of the method whose scans are being plotted
       max_dist_thresh_cm: the maximum distance threshold in centimeters
@@ -200,6 +200,12 @@ def fscore_and_confidence(
 
 
 def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
+  """Creates and saves individual plot for each ShadedAreaCurve passed in
+
+  Args:
+    shaded_curves: dictionary of reconstruction name and corresponding ShadedAreaCurve
+    percentile: percentile that is represented by the upper and lower bounds of the shaded curve
+  """
   for reconstruction_name, curve in shaded_curves.items():
     fig = plt.plot(figsize=(10, 6))
     plt.plot(curve.x, curve.mid, color='blue')
@@ -213,6 +219,13 @@ def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
 
 
 def plot_combined_fscores(shaded_curve: ShadedAreaCurve, percentile):
+  """Creates and saves plot with shaded_curve passed in as argument
+
+
+  Args:
+    shaded_curve: Information on curve which to plot
+    percentile: percentile that is represented by the upper and lower bounds of the shaded curve
+  """
   plt.plot(shaded_curve.x, shaded_curve.mid, color='blue')
   # colors in space between ci and median
   plt.fill_between(shaded_curve.x, shaded_curve.low, shaded_curve.high, color='#ADD8E6', alpha=0.75)
@@ -296,15 +309,14 @@ def resample_scene_distances(reconstruction: ReconstructionData, sample_size: in
 
 
 def create_x_labels_vplot(reconstructions: Sequence[ReconstructionInfo]):
-  '''Creates a list of labels for each x tick on a violinplot figure
+  """Creates a list of labels for each x tick on a violinplot figure
 
   Args:
-    groups: Sequence of names of scenes along with data to load them
-    split_interval: how often to split imbetween violin plots
+    reconstructions: Sequence of names of reconstructions along with data to load them
 
   Returns:
     list of labels for each x tick
-  '''
+  """
   x_labels = [""]
   for i, scene_info in enumerate(reconstructions):
     j = 20
@@ -319,10 +331,10 @@ def create_x_labels_vplot(reconstructions: Sequence[ReconstructionInfo]):
 
 # adapt to be save data of previous violin plot
 def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo]):
-  """Plots each scene in a Sequence of scenes as a violin plot
+  """Plots each reconstruction's distance distributions in a Sequence of reconstructions as a violin plot
 
   Args:
-    reconstructions: Sequence of names of scenes along with data to load them
+    reconstructions: Sequence of names of reconstructions along with data to load them
   """
   logging.info("Plotting violins for scenes")
 
@@ -362,12 +374,13 @@ def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo
   plt.tight_layout()
   plt.savefig(f'scene_violin_plot.png')
 
-def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
-  """Plots all scenes in a violin plot
 
-  Args:
-    reconstructions: Sequence of names of scenes along with data to load them
-  """
+def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
+  """Plots all reconstructions' distance distributions aggregated into one violin in a violin plot
+
+    Args:
+      reconstructions: Sequence of names of reconstructions along with data to load them
+    """
   logging.info("Plotting aggregated violins")
 
   fig, ax = plt.subplots(figsize=(3, 6))
@@ -403,11 +416,13 @@ def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
   plt.tight_layout()
   plt.savefig(f'agg_violin_plot.png')
 
+
 def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[ReconstructionInfo]):
-  """Plots each scene in a Sequence of scenes as a violin plot
+  """Plots the distribution of angles between each reconstruction's points' normal vectors and its corresponding
+  reconstructions in a Sequence of reconstructions as violin plots.
 
   Args:
-    reconstructions: Sequence of names of scenes along with data to load them
+    reconstructions: Sequence of names of reconstructions along with data to load them
   """
   logging.info("Plotting angle normal vector violins for scenes")
 
