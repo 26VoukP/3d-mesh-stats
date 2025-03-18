@@ -25,7 +25,8 @@ The following libraries are required to run this program:
 This script generates the plots and .npy files from 2 directories, one with scannet++ ground truth .ply files and 
 another with reconstructed .ply files. This script uses an application called mshcompare 
 (https://github.com/tomfunkhouser/gaps/tree/master/apps/mshcompare) to save .npy files describing the distances between 
-each point on a mesh and the closest surface on another mesh, and makes the plots based off this data. This script uses 
+each point on a mesh and the closest surface on another mesh, and makes the plots based off this data. Once the plots 
+are made, the script can be called with the same input and will use the already generated .npy files. This script uses 
 flags to take in and output data.
 
 *   `--scannetpp_data_dir`: Directory with the scanetpp meshes.
@@ -44,7 +45,7 @@ python make_plots_from_meshes.py \
   --f_score_percentile_from_median 75 \
   --f_score_max_distance_cm 150
 
-### 3d_mesh_scripts.py
+### plots_from_npy_files.py
 This script generates the plots and .npy files from the .npy files created my mshcompare.exe in 
 make_plots_from_meshes.py. It takes in the input and output directories using flags.
 *   `--input_dir`: Directory with the input .npy files.
@@ -56,7 +57,7 @@ make_plots_from_meshes.py. It takes in the input and output directories using fl
 
 **Examples**
 
-python 3d_mesh_scripts.py \
+python plots_from_npy_files.py \
   --input_dir /path/to/input/npy/files \
   --reconstructions scan1 scan2 scan3 \
   --gt2pred_suffix _gt2pred \

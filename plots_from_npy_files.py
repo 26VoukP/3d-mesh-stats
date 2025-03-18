@@ -369,7 +369,7 @@ def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo
 
   j = 1
   for i, reconstruction in enumerate(reconstructions):
-    logging.info("Plotting violin for group item " + reconstruction.name)
+    logging.info("Plotting violin for reconstruction " + reconstruction.name)
     scene_data = ReconstructionData.load(reconstruction)
     compressed_scene_data = resample_scene_distances(scene_data)
     sns.violinplot(data=compressed_scene_data,
@@ -388,7 +388,7 @@ def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'scene_violin_plot.png')
+  plt.savefig(f'scene_distance_violin_plot.png')
 
 
 def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
@@ -430,7 +430,7 @@ def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'agg_violin_plot.png')
+  plt.savefig(f'agg_distance_violin_plot.png')
 
 
 def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[ReconstructionInfo]):
@@ -456,7 +456,7 @@ def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[Reconstru
 
   j = 1
   for i, reconstruction in enumerate(reconstructions):
-    logging.info("Plotting violin for group item " + reconstruction.name)
+    logging.info("Plotting violin for reconstruction " + reconstruction.name)
     normal_angle_scene_data = calc_angle_normals(ReconstructionData.load(reconstruction))
     sns.violinplot(data=normal_angle_scene_data,
                    x=np.repeat(j, len(normal_angle_scene_data)), y="normal_vector_angles",
@@ -475,6 +475,44 @@ def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[Reconstru
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
   plt.savefig(f'scene_normal_angle_violin_plot.png')
+
+
+def plot_agg_violin_normal_vec_angles(reconstructions: Sequence[ReconstructionInfo]):
+  """Plots the distribution of angles between each reconstruction's points' normal vectors and its corresponding
+  reconstructions in a Sequence of reconstructions as a single, aggregated violin on a violin plot.
+
+
+    Args:
+      reconstructions: Sequence of names of reconstructions along with data to load them
+    """
+  logging.info("Plotting aggregated angle normal vector violins")
+
+  fig, ax = plt.subplots(figsize=(3, 6))
+
+  # Customize the plot
+  plt.ylabel("Angle (Degrees)")
+  plt.title('Reconstruction Distance')
+  x_label = ['Aggregated Distances']
+  x_positions = np.arange(len(x_label))
+  ax.set_xticks(x_positions)
+  ax.set_xticklabels(x_label)
+
+  agg_normal_angle_data = pd.DataFrame()
+  for reconstruction in reconstructions:
+    normal_angle_scene_data = calc_angle_normals(ReconstructionData.load(reconstruction))
+    agg_normal_angle_data = pd.concat([normal_angle_scene_data, normal_angle_scene_data], ignore_index=True, axis=0)
+  sns.violinplot(data=agg_normal_angle_data,
+                 x=np.repeat(0, len(agg_normal_angle_data)), y="normal_vector_angles",
+                 hue="direction", split=True, inner="quart",
+                 palette={"gt2pred": "skyblue", "pred2gt": "lightcoral"},
+                 native_scale=True)
+
+  handles, labels = plt.gca().get_legend_handles_labels()
+  handles_to_show = handles[:2]
+  labels_to_show = labels[:2]
+  plt.legend(handles_to_show, labels_to_show)
+  plt.tight_layout()
+  plt.savefig(f'agg_normal_angle_violin_plot.png')
 
 
 def make_plots():
@@ -507,6 +545,7 @@ def make_plots():
   plot_violin_distance_individual(reconstructions_info)
   plot_agg_violin_distance(reconstructions_info)
   plot_violin_normal_vec_angles_individual(reconstructions_info)
+  plot_agg_violin_normal_vec_angles(reconstructions_info)
 
 def main(argv):
   assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
