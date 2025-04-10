@@ -10,8 +10,8 @@ _SCANNETPP_DATA_DIR = flags.DEFINE_string("scannetpp_data_dir", "./scanetpp_data
 _PRED_MESH_DIR = flags.DEFINE_string("pred_mesh_dir", "./pred_meshes",
                                      "Directory of .ply files of meshes from one reconstruction algorithm. The mesh"
                                      " filenames should include the name of corresponding scene.")
-_OUTPUT_DIR = flags.DEFINE_string("output_dir", ".", "Directory in which to put folders for each scene with all data "
-                                                     "relating to that scene.")
+_OUTPUT_DIR = flags.DEFINE_string("output_dir", ".", "Directory in which to put output plots. Intermediate npy files"
+                                                     "will be placed in a subdir called intermediate_data")
 _MSHCOMPARE_FILE = flags.DEFINE_string("mshcompare_file", "./mshcompare",
                                        "Location and filename of mshcompare executable file.")
 _F_SCORE_PERCENTILE_FROM_MEDIAN = flags.DEFINE_integer("f_score_percentile_from_median", 66,
@@ -19,6 +19,7 @@ _F_SCORE_PERCENTILE_FROM_MEDIAN = flags.DEFINE_integer("f_score_percentile_from_
                                                        "plot")
 _F_SCORE_MAX_DISTANCE_CM = flags.DEFINE_integer("f_score_max_distance_cm", 200, "Maximum distance threshold, in cm, "
                                                                                 "plot")
+INTERMEDIATE_DATA_DIR = 'intermediate_data'
 
 def main(argv):
     assert len(argv) == 1, f"Unrecognized args {argv[1:]}"
@@ -28,7 +29,7 @@ def main(argv):
         scene_dir = os.path.join(_SCANNETPP_DATA_DIR.value, scene_name)
         gt_mesh = os.path.join(scene_dir, "scans", "mesh_aligned_0.05.ply")
         # Create scene directory
-        scene_output_dir = os.path.join(_OUTPUT_DIR.value, scene_name)
+        scene_output_dir = os.path.join(_OUTPUT_DIR.value, INTERMEDIATE_DATA_DIR, scene_name)
         scene_output_dirs.append(os.path.basename(scene_output_dir))
         os.makedirs(scene_output_dir, exist_ok=True)
         # assumes pred_mesh will contain of scene name of scene in scannetpp dataset
@@ -49,8 +50,9 @@ def main(argv):
             if not os.path.exists(gt_to_pred_stats):
                 print(f"Creating {gt_to_pred_stats}")
                 subprocess.run([_MSHCOMPARE_FILE.value, gt_mesh, pred_mesh, gt_to_pred_stats, "-v"])
-    mesh_stats_plotter.make_plots(_OUTPUT_DIR.value, scene_output_dirs, ".gt2pred.npy",
-                                  _F_SCORE_PERCENTILE_FROM_MEDIAN.value, _F_SCORE_MAX_DISTANCE_CM.value)
+    mesh_stats_plotter.make_plots(os.path.join(_OUTPUT_DIR.value, INTERMEDIATE_DATA_DIR), _OUTPUT_DIR.value,
+                                  scene_output_dirs, ".gt2pred.npy", _F_SCORE_PERCENTILE_FROM_MEDIAN.value,
+                                  _F_SCORE_MAX_DISTANCE_CM.value)
 
 if __name__ == "__main__":
     app.run(main)

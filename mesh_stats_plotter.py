@@ -199,12 +199,13 @@ def fscore_and_confidence(
   return reconstruction_curves, agg_reconstructions_curve
 
 
-def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
+def plot_fscores(output_dir, shaded_curves: dict[str, ShadedAreaCurve], percentile):
   """Creates and saves individual plot for each ShadedAreaCurve passed in
 
   Args:
-    shaded_curves: dictionary of reconstruction name and corresponding ShadedAreaCurve
-    percentile: percentile that is represented by the upper and lower bounds of the shaded curve
+    output_dir: Directory in which to output the generated plot
+    shaded_curves: Dictionary of reconstruction name and corresponding ShadedAreaCurve
+    percentile: Percentile that is represented by the upper and lower bounds of the shaded curve
   """
   for reconstruction_name, curve in shaded_curves.items():
     fig = plt.plot(figsize=(10, 6))
@@ -214,17 +215,18 @@ def plot_fscores(shaded_curves: dict[str, ShadedAreaCurve], percentile):
     plt.title(f'{reconstruction_name} F-score')
     plt.xlabel("Distance Threshold(CM)")
     plt.ylabel(f"F-score mean and {percentile}% from median")
-    plt.savefig(f'{reconstruction_name}_F-Score.png')
+    plt.savefig(os.path.join(output_dir, f'{reconstruction_name}_F-Score.png'))
     plt.close()
 
 
-def plot_combined_fscores(shaded_curve: ShadedAreaCurve, percentile):
+def plot_combined_fscores(output_dir, shaded_curve: ShadedAreaCurve, percentile):
   """Creates and saves plot with shaded_curve passed in as argument
 
 
   Args:
+    output_dir: Directory in which to output the generated plot
     shaded_curve: Information on curve which to plot
-    percentile: percentile that is represented by the upper and lower bounds of the shaded curve
+    percentile: Percentile that is represented by the upper and lower bounds of the shaded curve
   """
   plt.plot(shaded_curve.x, shaded_curve.mid, color='blue')
   # colors in space between ci and median
@@ -233,7 +235,7 @@ def plot_combined_fscores(shaded_curve: ShadedAreaCurve, percentile):
   plt.title(f'Scene F-scores')
   plt.xlabel("Distance Threshold(CM)")
   plt.ylabel(f"F-score mean and {percentile}% from median")
-  plt.savefig(f'aggregated_f_scores.png')
+  plt.savefig(os.path.join(output_dir, f'aggregated_f_scores.png'))
 
 
 def get_opposite_direction_col(column_name: str) -> str:
@@ -330,10 +332,11 @@ def create_x_labels_vplot(reconstructions: Sequence[ReconstructionInfo]):
 
 
 # adapt to be save data of previous violin plot
-def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo]):
+def plot_violin_distance_individual(output_dir, reconstructions: Sequence[ReconstructionInfo]):
   """Plots each reconstruction's distance distributions in a Sequence of reconstructions as a violin plot
 
   Args:
+    output_dir: Directory in which to output the generated plot
     reconstructions: Sequence of names of reconstructions along with data to load them
   """
   logging.info("Plotting distance violins for scenes")
@@ -372,13 +375,14 @@ def plot_violin_distance_individual(reconstructions: Sequence[ReconstructionInfo
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'scene_distance_violin_plot.png')
+  plt.savefig(os.path.join(output_dir, f'scene_distance_violin_plot.png'))
 
 
-def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
+def plot_agg_violin_distance(output_dir, reconstructions: Sequence[ReconstructionInfo]):
   """Plots all reconstructions' distance distributions aggregated into one violin in a violin plot
 
     Args:
+      output_dir: Directory in which to output the generated plot
       reconstructions: Sequence of names of reconstructions along with data to load them
     """
   logging.info("Plotting aggregated distance violins")
@@ -410,14 +414,15 @@ def plot_agg_violin_distance(reconstructions: Sequence[ReconstructionInfo]):
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'agg_distance_violin_plot.png')
+  plt.savefig(os.path.join(output_dir, f'agg_distance_violin_plot.png'))
 
 
-def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[ReconstructionInfo]):
+def plot_violin_normal_vec_angles_individual(output_dir, reconstructions: Sequence[ReconstructionInfo]):
   """Plots the distribution of angles between each reconstruction's points' normal vectors and its corresponding
   reconstructions in a Sequence of reconstructions as violin plots.
 
   Args:
+    output_dir: Directory in which to output the generated plot
     reconstructions: Sequence of names of reconstructions along with data to load them
   """
   logging.info("Plotting angle normal vector violins for scenes")
@@ -455,15 +460,16 @@ def plot_violin_normal_vec_angles_individual(reconstructions: Sequence[Reconstru
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'scene_normal_angle_violin_plot.png')
+  plt.savefig(os.path.join(output_dir, f'scene_normal_angle_violin_plot.png'))
 
 
-def plot_agg_violin_normal_vec_angles(reconstructions: Sequence[ReconstructionInfo]):
+def plot_agg_violin_normal_vec_angles(output_dir, reconstructions: Sequence[ReconstructionInfo]):
   """Plots the distribution of angles between each reconstruction's points' normal vectors and its corresponding
   reconstructions in a Sequence of reconstructions as a single, aggregated violin on a violin plot.
 
 
     Args:
+      output_dir: Directory in which to output the generated plot
       reconstructions: Sequence of names of reconstructions along with data to load them
     """
   logging.info("Plotting aggregated angle normal vector violins")
@@ -493,11 +499,10 @@ def plot_agg_violin_normal_vec_angles(reconstructions: Sequence[ReconstructionIn
   labels_to_show = labels[:2]
   plt.legend(handles_to_show, labels_to_show)
   plt.tight_layout()
-  plt.savefig(f'agg_normal_angle_violin_plot.png')
+  plt.savefig(os.path.join(output_dir, f'agg_normal_angle_violin_plot.png'))
 
 
-
-def make_plots(input_dir, reconstructions, gt2pred_suffix, f_score_pecentile_from_median,
+def make_plots(input_dir, output_dir, reconstructions, gt2pred_suffix, f_score_pecentile_from_median,
                f_score_max_distance_cm):
   matplotlib.use('Agg')
   # makes a list of my own scene data for testing
@@ -519,15 +524,15 @@ def make_plots(input_dir, reconstructions, gt2pred_suffix, f_score_pecentile_fro
                                                                   "Overall F-Score",
                                                                   f_score_max_distance_cm)
 
-  plot_fscores(reconstruction_curves, f_score_pecentile_from_median)
-  plot_combined_fscores(aggregated_curve, f_score_pecentile_from_median)
+  plot_fscores(output_dir, reconstruction_curves, f_score_pecentile_from_median)
+  plot_combined_fscores(output_dir, aggregated_curve, f_score_pecentile_from_median)
   for group, shaded_curve in reconstruction_curves.items():
-    np.savez(f'fscore_{group}.npz', shaded_curve.low, shaded_curve.mid, shaded_curve.high)
-  np.savez(f'aggregated_fscore.npz', aggregated_curve.low, aggregated_curve.mid, aggregated_curve.high)
-  plot_violin_distance_individual(reconstructions_info)
-  plot_agg_violin_distance(reconstructions_info)
-  plot_violin_normal_vec_angles_individual(reconstructions_info)
-  plot_agg_violin_normal_vec_angles(reconstructions_info)
+    np.savez(os.path.join(output_dir, f'fscore_{group}.npz'), shaded_curve.low, shaded_curve.mid, shaded_curve.high)
+  np.savez(os.path.join(output_dir, f'aggregated_fscore.npz'), aggregated_curve.low, aggregated_curve.mid, aggregated_curve.high)
+  plot_violin_distance_individual(output_dir, reconstructions_info)
+  plot_agg_violin_distance(output_dir, reconstructions_info)
+  plot_violin_normal_vec_angles_individual(output_dir, reconstructions_info)
+  plot_agg_violin_normal_vec_angles(output_dir, reconstructions_info)
 
 
 def main(argv):
